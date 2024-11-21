@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -139,9 +140,39 @@ class Session {
   /// Returns the session for the specified request, if it was previously
   /// created; otherwise returns null.
   static Session? getSession(Request request) {
-    final sessionId = _getSessionId(request);
     final now = DateTime.now();
-    _sessions.removeWhere((k, v) => v.expires.compareTo(now) < 0);
+    _sessions.removeWhere((k, v) => v.expires.isBefore(now));
+
+    final sessionId = _getSessionId(request);
     return _sessions[sessionId];
   }
+}
+
+Future<void> restoreSessions(Future<String> Function() restorer) async {
+  final serializedSessionsData = await restorer();
+  final sessionsData = jsonDecode(serializedSessionsData) as Map<String, dynamic>;
+
+  for (final entry in sessionsData.entries) {
+    final session = Session._(id: entry.value['id']);
+    session.data.addAll(entry.value['data']);
+    session.expires = DateTime.parse(entry.value['expires']);
+
+    _sessions[entry.key] = session;
+  }
+}
+
+Future<void> saveSessions(Future<void> Function(String) saver) async {
+  final transformedSessions = _sessions.map((key, value) {
+    final session = {
+      'id': value.id,
+      'expires': value.expires.toIso8601String(),
+      'data': value.data,
+    };
+
+    return MapEntry(key, session);
+  });
+
+  final serializedSessions = jsonEncode(transformedSessions);
+
+  return saver(serializedSessions);
 }
