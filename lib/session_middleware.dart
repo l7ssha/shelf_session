@@ -15,12 +15,16 @@ Middleware sessionMiddleware() {
   return (Handler innerHandler) {
     return (Request request) async {
       request = _addSessionIdToRequest(request);
+
       final sessionId = _getSessionId(request);
+      final session = _sessions[sessionId];
+      final expires = session?.expires ?? DateTime.now().add(Session.lifetime);
+      if (session != null) {
+        session.expires = expires;
+      }
+
       final requestedUri = request.requestedUri;
       final isSecure = requestedUri.scheme == 'https';
-      final now = DateTime.now();
-      final lifetime = Session.lifetime;
-      final expires = now.add(lifetime);
       final cookie = Cookie(
         Session.name,
         sessionId,
@@ -32,10 +36,6 @@ Middleware sessionMiddleware() {
       cookie.httpOnly = true;
       request.addCookie(cookie);
       final response = await innerHandler(request);
-      final session = _sessions[sessionId];
-      if (session != null) {
-        session.expires = expires;
-      }
 
       return response;
     };
@@ -102,7 +102,7 @@ Map<String, String> _parseCookieHeader(Request request) {
 
 class Session {
   /// Session lifetime.
-  static Duration lifetime = Duration(minutes: 30);
+  static Duration lifetime = Duration(days: 1, hours: 12);
 
   // The session name is a global value used as a cookie name to store the
   // session id.
